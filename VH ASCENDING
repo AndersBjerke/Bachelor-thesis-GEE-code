@@ -1,0 +1,55 @@
+/ Sentinel 1 avalanche mapping for Lyngen Alps
+var aoi = geometry; // area of interest in the Lyngen Alps
+
+// Filter Sentinel-1 images by area and sensor parameters
+var s1 = ee.ImageCollection('COPERNICUS/S1_GRD')
+        .filterBounds(aoi)
+        .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VH'))
+        .filter(ee.Filter.eq('instrumentMode', 'IW'))
+        .filter(ee.Filter.eq('orbitProperties_pass', 'ASCENDING'))
+        .select('VH');
+
+//  period before March 29, 2023, for pre-event images
+var preEventStart = '2023-03-23';
+var preEventEnd = '2023-03-28';
+
+// And a short period after April 1, 2023, for post-event images
+var postEventStart = '2023-04-01';
+var postEventEnd = '2023-04-02';
+
+// Filter images by date for pre-event and create a median mosaic
+var pre = s1.filterDate(preEventStart, preEventEnd).median();
+
+// Add the pre-event image to the map
+Map.addLayer(pre, {min: -25, max: 5}, 'Pre');
+
+// Filter images by date for post-event and create a median mosaic
+var post = s1.filterDate(postEventStart, postEventEnd).median();
+
+// Add the post-event image to the map
+Map.addLayer(post, {min: -25, max: 5}, 'Post');
+
+// Calculate the change between both images
+var change = pre.divide(post);
+Map.addLayer(change, {min: -1, max: 5}, 'Change');
+
+// Create an RGB image from pre and post images to better visualize areas of change
+var rgb = pre.addBands([pre, post]);
+Map.addLayer(rgb, {bands: ['VH_1_1', 'VH_1', 'VH'], min: -25, max: 5}, 'RGB');
+
+// Create a binary raster from the change image using a threshold
+var change_binary = change.gt(2).clip(aoi);
+Map.addLayer(change_binary, {palette: ['black', 'red']}, 'Binary');
+
+// Export binary change image to your Google Drive
+Export.image.toDrive({
+  image: change_binary,
+  description: 'LyngenAlps_Avalanche_MarApr2023',
+  fileNamePrefix: 'LyngenAlps_Avalanche_MarApr2023',
+  region: aoi,
+  scale: 10,
+  folder: 'GEE_LyngenAlps',
+  crs: 'EPSG:25833',
+  maxPixels: 1e10
+});
+
