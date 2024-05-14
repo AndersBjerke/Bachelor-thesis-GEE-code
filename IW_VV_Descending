@@ -1,0 +1,209 @@
+///////Workflow for DEM Avalanche Terrain Mask Creation////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+ 
+
+// Center the map on the AOI.
+
+Map.centerObject(geometry, 10);
+
+ 
+
+// Import the MERIT DEM dataset and select the elevation band.
+
+var dataset = ee.Image('MERIT/DEM/v1_0_3').select('dem');
+
+ 
+
+// Set elevation visualization properties.
+
+var elevationVis = {
+
+  min: -3,
+
+  max: 1200,
+
+  palette: [
+
+     'brown','red', 'blue', 'green','orange','yellow','white','purple']
+
+};
+
+ 
+
+// Add the MERIT DEM as a base map layer.
+
+Map.addLayer(dataset.clip(geometry), elevationVis, 'MERIT DEM');
+
+ 
+
+// Add the MERIT DEM as a hillshade.
+
+var hillshade = ee.Terrain.hillshade(dataset);
+
+Map.addLayer(hillshade.clip(geometry), {min: 0, max: 255}, 'MERIT DEM Hillshade');
+
+ 
+
+// Calculate terrain slope
+
+var slope = ee.Terrain.slope(dataset);
+
+ 
+
+// Create a mask showing areas with slope between 20 and 45 degrees.
+
+var slope2045Mask = slope.gt(20).and(slope.lte(45));
+
+ 
+
+// Buffer the mask by 200 meters
+
+var bufferDistance = 200;
+
+var slope2045Buffer = slope2045Mask.focal_max(bufferDistance, 'circle', 'meters');
+
+ 
+
+// Set slope visualization properties.
+
+var slopeVis = {
+
+  min: 20,
+
+  max: 45,
+
+  palette: ['yellow', 'orange', 'red']
+
+};
+
+ 
+
+// Add the terrain slope to the map.
+
+Map.addLayer(slope.clip(geometry), slopeVis, 'Terrain Slope');
+
+ 
+
+// Add slope classification to the map.
+
+Map.addLayer(slope2045Buffer.selfMask(), {palette: 'gray'}, 'Slope 20-45 deg with buffer');
+
+ 
+
+////////Workflow with S1 Differencing////////
+
+////////////////////////////////////////////////////////////////////////////////
+
+ 
+
+// Filter Sentinel-1 images by area and sensor parameters
+
+var s1 = ee.ImageCollection('COPERNICUS/S1_GRD')
+
+        .filterBounds(geometry)
+
+        .filter(ee.Filter.listContains('transmitterReceiverPolarisation', 'VV'))
+
+        .filter(ee.Filter.eq('instrumentMode', 'IW'))
+
+        .filter(ee.Filter.eq('orbitProperties_pass', 'DESCENDING'))
+
+        .select('VV');
+
+ 
+
+//  period before 1.April, 2023, for pre-event images
+
+var preEventStart = '2023-03-21';
+
+var preEventEnd = '2023-03-28';
+
+ 
+
+// And a short period after 1. April 2023, for post-event images
+
+var postEventStart = '2023-04-01';
+
+var postEventEnd = '2023-04-03';
+
+ 
+
+// Filter images by date for pre-event and create a median mosaic
+
+var pre = s1.filterDate(preEventStart, preEventEnd).median();
+
+ 
+
+// Add the pre-event image to the map
+
+Map.addLayer(pre, {min: -25, max: 5}, 'Pre');
+
+ 
+
+// Filter images by date for post-event and create a median mosaic
+
+var post = s1.filterDate(postEventStart, postEventEnd).median();
+
+ 
+
+// Add the post-event image to the map
+
+Map.addLayer(post, {min: -25, max: 5}, 'Post');
+
+ 
+
+// Calculate the change between both images
+
+var change = pre.divide(post);
+
+Map.addLayer(change, {min: -1, max: 5}, 'Change');
+
+ 
+
+// Create an RGB image from pre and post images to better visualize areas of change
+
+var rgb = pre.addBands([pre, post]);
+
+Map.addLayer(rgb, {bands: ['VV_1_1', 'VV_1', 'VV'], min: -25, max: 5}, 'RGB');
+
+ 
+
+ 
+
+// Create a binary raster from the change image using a threshold
+
+var change_binary = change.gt(2.5).clip(geometry);
+
+Map.addLayer(change_binary, {palette: ['black', 'red']}, 'Binary');
+
+ 
+
+// Apply the slope mask to the binary change detection layer
+
+var maskedChange = change_binary.updateMask(slope2045Buffer);
+
+ 
+
+// Add the masked change detection layer to the map
+
+Map.addLayer(maskedChange, { palette: ['red', 'blue'] }, 'Change Detection (Slope Masked)');
+
+ 
+
+// Export the change detection layer as GeoTIFF
+
+Export.image.toDrive({
+
+  image: maskedChange,
+
+  description: 'change_detection',
+
+  scale: 30,
+
+  region: geometry,
+
+  fileFormat: 'GeoTIFF'
+
+});
