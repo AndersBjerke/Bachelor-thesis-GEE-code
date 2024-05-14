@@ -4,7 +4,7 @@
 Combination of parts from Ursula Enzenhofer, Ronja Lappe and inspiration from teh articles which are online ( Eckersdorfer as well as all articles showing S1 and GEE). 
 
 **Project Overview**
-This repository contains the code developed for the Bachelor thesis titled "Further Understanding of Avalanche Cycles Using Remote Sensing". 
+This repository contains the code developed for the Bachelor thesis titled "Mapping The Unseen: A Quantitative Analysis Of Avalanche Cycle Using Sentinel-1 And Google Earth Engine ". 
 The project focuses on quantitative analysis of avalanche incidents that occurred on March 31, 2023, in Northern Norway, utilizing data from Sentinel-1 satellites and processed through Google Earth Engine (GEE).
 
 **Objectives**
